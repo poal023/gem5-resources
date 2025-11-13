@@ -20,29 +20,15 @@ apt-get install -y build-essential
 # Remove the motd
 rm /etc/update-motd.d/*
 
-# Build the m5 util
-git clone https://github.com/gem5/gem5.git --depth=1 --filter=blob:none --no-checkout --sparse --single-branch --branch=stable
-pushd gem5
-# Checkout just the files we need
-git sparse-checkout add util/m5
-git sparse-checkout add include
-git checkout
-# Build the library and binary
-pushd util/m5
-scons build/x86/out/m5
-cp build/x86/out/m5 /sbin/m5
-popd
-popd
-rm -rf gem5
 
 # Occasionally connecting to github fails. Bail now instead of making a disk
 # image that is not usable.
-if [ ! -f /sbin/m5 ]; then
-    echo "m5 util did not appear to build correctly. This disk will not be usable."
-    echo "Try to build the disk again if there was a temporary error (e.g., not able to connect to github)."
-    echo "For other problems create an issue at https://github.com/gem5/gem5/issues."
-    exit 1
-fi
+#if [ ! -f /sbin/m5 ]; then
+#    echo "m5 util did not appear to build correctly. This disk will not be usable."
+#    echo "Try to build the disk again if there was a temporary error (e.g., not able to connect to github)."
+#    echo "For other problems create an issue at https://github.com/gem5/gem5/issues."
+#    exit 1
+#fi
 
 # Make the script to load amdgpu module with the above module executable
 chmod a+x /home/gem5/load_amdgpu.sh
@@ -94,6 +80,36 @@ sudo apt -y install "linux-headers-${KERNEL}" "linux-modules-extra-${KERNEL}"
 
 echo "Extracting linux kernel"
 sudo bash -c "/usr/src/linux-headers-${KERNEL}/scripts/extract-vmlinux /boot/vmlinuz-${KERNEL} > /home/gem5/vmlinux-gpu-ml"
+# Build the m5 util
+git clone https://github.com/gem5/gem5.git --depth=1 --filter=blob:none --no-checkout --sparse --single-branch --branch=stable
+pushd gem5
+# Checkout just the files we need
+git sparse-checkout add util/m5
+git sparse-checkout add util/gem5_bridge
+git sparse-checkout add include
+git checkout
+# Build the library and binary
+pushd util/m5
+scons build/x86/out/m5
+cp build/x86/out/m5 /usr/local/bin/
+cp build/x86/out/libm5.a /usr/local/lib/
+popd # util/m5
+pushd util/gem5_bridge
+make build install KVERSION=${KERNEL}
+depmod --quick
+popd
+popd
+
+mv /usr/local/bin/m5 /usr/local/bin/gem5-bridge
+
+chmod 4755 /usr/local/bin/gem5-bridge
+chmod u+s /usr/local/bin/gem5-bridge
+
+ln -s /usr/local/bin/gem5-bridge /usr/local/bin/m5
+
+rm -rf gem5
+
+echo "gem5-bridge complete!"
 
 # Build the gem5 Linux module containing symbols missing due to outdated ACPI support in gem5
 pushd /home/gem5
@@ -116,8 +132,8 @@ popd
 # Package: Pip
 # Language: Python
 # Compute Platfrom: ROCm 6.2.4
-sudo apt -y install pip3
-pip3 install --break-system-packages torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.0
+#sudo apt -y install pip3
+#pip3 install --break-system-packages torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.0
 
 # For a newer version uncomment one below and remove the above install:
 # Warning: Absurdly slow compared to ROCm 6.0 *in simulation*:
@@ -126,6 +142,12 @@ pip3 install --break-system-packages torch torchvision torchaudio --index-url ht
 #pip3 install --break-system-packages torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.3
 # Warning: nightly build, may not work depending on day. Use at your own risk:
 #pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/rocm6.4/ --break-system-packages
+
+echo "installing gem5 init script into init process"
+chmod 755 /home/gem5/gem5_init.sh
+mv /home/gem5/gem5_init.sh /sbin/
+mv /sbin/init /sbin/init.gem5.bak
+ln -s /sbin/gem5_init.sh /sbin/init
 
 # Setup gem5 auto login.
 mv /home/gem5/serial-getty@.service /lib/systemd/system/

@@ -58,6 +58,11 @@ build {
 
   provisioner "file" {
     destination = "/home/gem5/"
+    source      = "files/gem5_init.sh"
+  }
+
+  provisioner "file" {
+    destination = "/home/gem5/"
     source      = "files/run_gem5_app.sh"
   }
 
